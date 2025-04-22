@@ -1,12 +1,9 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import React from "react";
 import {
   ChevronDown,
-  ChevronRight,
   Menu,
-  MessageSquare,
-  Search,
   X,
   Sun,
   Moon,
@@ -22,25 +19,9 @@ import {
   LogIn,
   Handshake,
   ShieldCheck,
+  MessageSquare,
 } from "lucide-react";
-
-const fiatCurrencies = [
-  { name: "Indian Rupees", code: "INR", symbol: "₹", flag: "/img/ind.png" },
-  { name: "Türk Lirasi", code: "TRY", symbol: "₺", flag: "/img/tru.png" },
-  { name: "Mexican Peso", code: "MXN", symbol: "MXN", flag: "/img/mex.png" },
-  { name: "Vietnamese Dong", code: "VND", symbol: "₫", flag: "/img/viet.png" },
-  { name: "Nigerian Naira", code: "NGN", symbol: "₦", flag: "/img/nig.png" },
-  { name: "Brazilian Real", code: "BRL", symbol: "R$", flag: "/img/round.png" },
-  { name: "Peruvian Sol", code: "PEN", symbol: "S/.", flag: "/img/peru.png" },
-];
-
-const cryptoCurrencies = [
-  { name: "Tether", code: "USDT", symbol: "USDT", icon: "💎" },
-  { name: "Bitcoin", code: "BTC", symbol: "BTC", icon: "₿" },
-  { name: "Ethereum", code: "ETH", symbol: "ETH", icon: "Ξ" },
-  { name: "USD Coin", code: "USDC", symbol: "USDC", icon: "⓾" },
-  { name: "Binance Coin", code: "BNB", symbol: "BNB", icon: "⚛" },
-];
+import Swap from "./Swap";
 
 type Currency = {
   name: string;
@@ -50,196 +31,108 @@ type Currency = {
   icon?: string;
 };
 
-export default function Buy() {
-  const [amount, setAmount] = useState("1050");
-  const [showFiatDropdown, setShowFiatDropdown] = useState(false);
-  const [showCryptoDropdown, setShowCryptoDropdown] = useState(false);
-  const [selectedFiat, setSelectedFiat] = useState<Currency>({
-    name: "Indian Rupees",
-    code: "INR",
-    symbol: "₹",
-    flag: "/img/ind.png",
+export default function Buy({
+  isDarkMode,
+  fiatCurrencies: propFiatCurrencies,
+  cryptoCurrencies: propCryptoCurrencies,
+  networkOptions,
+  cryptoToINR,
+  onUpdateTransaction,
+}: any) {
+  // Define default currencies if not provided
+  const fiatCurrencies = propFiatCurrencies || [
+    { name: "Indian Rupees", code: "INR", symbol: "₹", flag: "/img/ind.png" },
+    { name: "Türk Lirasi", code: "TRY", symbol: "₺", flag: "/img/tru.png" },
+    { name: "Mexican Peso", code: "MXN", symbol: "MXN", flag: "/img/mex.png" },
+    {
+      name: "Vietnamese Dong",
+      code: "VND",
+      symbol: "₫",
+      flag: "/img/viet.png",
+    },
+    { name: "Nigerian Naira", code: "NGN", symbol: "₦", flag: "/img/nig.png" },
+    {
+      name: "Brazilian Real",
+      code: "BRL",
+      symbol: "R$",
+      flag: "/img/round.png",
+    },
+    { name: "Peruvian Sol", code: "PEN", symbol: "S/.", flag: "/img/peru.png" },
+  ];
+
+  const cryptoCurrencies = propCryptoCurrencies || [
+    { name: "Tether", code: "USDT", symbol: "USDT", icon: "💎" },
+    { name: "Bitcoin", code: "BTC", symbol: "BTC", icon: "₿" },
+    { name: "Ethereum", code: "ETH", symbol: "ETH", icon: "Ξ" },
+    { name: "USD Coin", code: "USDC", symbol: "USDC", icon: "⓾" },
+    { name: "Binance Coin", code: "BNB", symbol: "BNB", icon: "⚛" },
+  ];
+
+  const [amount, setAmount] = useState<string>(() => {
+    return "1050";
   });
-  const [selectedCrypto, setSelectedCrypto] = useState<Currency>({
-    name: "Tether",
-    code: "USDT",
-    symbol: "USDT",
-    icon: "💎",
+
+  const [youGetValue, setYouGetValue] = useState<string>(() => {
+    return "11.14";
   });
-  const [searchFiat, setSearchFiat] = useState("");
-  const [searchCrypto, setSearchCrypto] = useState("");
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const fiatDropdownRef = useRef<HTMLDivElement>(null);
-  const cryptoDropdownRef = useRef<HTMLDivElement>(null);
-  const fiatButtonRef = useRef<HTMLDivElement>(null);
-  const cryptoButtonRef = useRef<HTMLDivElement>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const toggleTheme = () => setIsDarkMode((prev) => !prev);
-  const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
-  const [selectedCryptoForNetwork, setSelectedCryptoForNetwork] =
-    useState<Currency | null>(null);
+
+  const [selectedFiat, setSelectedFiat] = useState<Currency>(() => {
+    return fiatCurrencies.length > 0 ? fiatCurrencies[0] : undefined;
+  });
+
+  const [selectedCrypto, setSelectedCrypto] = useState<Currency>(() => {
+    return cryptoCurrencies.length > 0 ? cryptoCurrencies[0] : undefined;
+  });
+
   const [selectedNetwork, setSelectedNetwork] = useState<any>(null);
-  const networkOptions = {
-    USDT: [
-      {
-        name: "ERC20",
-        fee: "1.5",
-        minBuy: "100",
-        desc: "Ethereum Network",
-      },
-      { name: "TRC20", fee: "0.0001", minBuy: "50", desc: "Tron Network" },
-      {
-        name: "BEP20",
-        fee: "0.00031",
-        minBuy: "150",
-        desc: "Binance Smart Chain",
-      },
-    ],
-    BTC: [
-      {
-        name: "ERC20",
-        fee: "0.000019",
-        minBuy: "300",
-        desc: "Ethereum Network",
-      },
-      {
-        name: "BEP20",
-        fee: "0.0000069",
-        minBuy: "300",
-        desc: "Binance Smart C...",
-      },
-      { name: "BTC", fee: "0.00003", minBuy: "420", desc: "Bitcoin" },
-      { name: "KCC", fee: "0.00002", minBuy: "3100", desc: "KCC" },
-      {
-        name: "BTCLN",
-        fee: "0.00002",
-        minBuy: "300",
-        desc: "Lightning Network",
-      },
-    ],
-    ETH: [
-      {
-        name: "ERC20",
-        fee: "0.00042",
-        minBuy: "100",
-        desc: "Ethereum Network",
-      },
-      {
-        name: "BEP20",
-        fee: "0.00031",
-        minBuy: "150",
-        desc: "Binance Smart C...",
-      },
-    ],
-    USDC: [
-      {
-        name: "ERC20",
-        fee: "0.00042",
-        minBuy: "100",
-        desc: "Ethereum Network",
-      },
-      { name: "TRC20", fee: "0.0001", minBuy: "50", desc: "Tron Network" },
-      {
-        name: "BEP20",
-        fee: "0.00031",
-        minBuy: "150",
-        desc: "Binance Smart Chain",
-      },
-    ],
-    BNB: [
-      {
-        name: "BEP20",
-        fee: "0.00031",
-        minBuy: "150",
-        desc: "Binance Smart Chain",
-      },
-      {
-        name: "ERC20",
-        fee: "0.00042",
-        minBuy: "100",
-        desc: "Ethereum Network",
-      },
-    ],
-  };
-  const cryptoToINR = {
-    USDT: 94,
-    BTC: 6000000,
-    ETH: 300000,
-    USDC: 94,
-    BNB: 25000,
-  };
-  const networkFeeInINR =
-    selectedNetwork && selectedCrypto
-      ? (
-          parseFloat(selectedNetwork.fee) *
-          (cryptoToINR[selectedCrypto.code] || 0)
-        ).toFixed(2)
-      : "0";
-  const filteredFiat = fiatCurrencies.filter(
-    (currency) =>
-      currency.name.toLowerCase().includes(searchFiat.toLowerCase()) ||
-      currency.code.toLowerCase().includes(searchFiat.toLowerCase())
-  );
-  const filteredCrypto = cryptoCurrencies.filter(
-    (currency) =>
-      currency.name.toLowerCase().includes(searchCrypto.toLowerCase()) ||
-      currency.code.toLowerCase().includes(searchCrypto.toLowerCase())
-  );
-  const handleSelectFiat = (currency: Currency) => {
-    setSelectedFiat(currency);
-    setShowFiatDropdown(false);
-  };
-  const handleSelectCrypto = (currency: Currency) => {
-    setSelectedCrypto(currency);
-    setShowCryptoDropdown(false);
-  };
+
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        showFiatDropdown &&
-        fiatDropdownRef.current &&
-        !fiatDropdownRef.current.contains(event.target as Node) &&
-        !fiatButtonRef.current?.contains(event.target as Node)
-      ) {
-        setShowFiatDropdown(false);
-      }
-      if (
-        showCryptoDropdown &&
-        cryptoDropdownRef.current &&
-        !cryptoDropdownRef.current.contains(event.target as Node) &&
-        !cryptoButtonRef.current?.contains(event.target as Node)
-      ) {
-        setShowCryptoDropdown(false);
-      }
+    if (selectedNetwork === null && networkOptions) {
+      const firstCrypto = Object.keys(networkOptions)[0];
+      setSelectedNetwork(networkOptions[firstCrypto][0]);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleTransactionUpdate = useCallback((details) => {
+    if (details) {
+      setAmount(details.payAmount || amount);
+      setYouGetValue(details.youGetAmount || youGetValue);
+
+      if (details.selectedFiat) setSelectedFiat(details.selectedFiat);
+      if (details.selectedCrypto) setSelectedCrypto(details.selectedCrypto);
+      if (details.selectedNetwork) setSelectedNetwork(details.selectedNetwork);
+    }
+
+    console.log("Transaction Details:", details);
+  }, []);
+
+  const calculateTotalFees = useMemo(() => {
+    const onrampFee = ((parseFloat(amount) * 25) / 10000).toFixed(2);
+    const networkFeeInINR =
+      selectedNetwork && selectedCrypto
+        ? (
+            parseFloat(selectedNetwork.fee) *
+            (cryptoToINR[selectedCrypto.code] || 0)
+          ).toFixed(2)
+        : "0";
+
+    return {
+      onrampFee,
+      networkFeeInINR,
+      totalFees: (
+        parseFloat(onrampFee) + parseFloat(networkFeeInINR || 0)
+      ).toFixed(2),
     };
-  }, [showFiatDropdown, showCryptoDropdown]);
+  }, [amount, selectedNetwork, selectedCrypto, cryptoToINR]);
+
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const toggleSidebar = () => setShowSidebar((prev) => !prev);
 
-  // Add state for 'You get' value
-  const [youGetValue, setYouGetValue] = useState("11.14");
-
-  // Update Pay (amount) automatically when 'You get', selectedCrypto, or selectedNetwork changes
-  useEffect(() => {
-    if (selectedCrypto && selectedNetwork) {
-      const inrValue =
-        cryptoToINR[selectedCrypto.code as keyof typeof cryptoToINR] || 0;
-      setAmount((parseFloat(youGetValue) * inrValue).toFixed(2));
-    }
-  }, [youGetValue, selectedCrypto, selectedNetwork]);
-
-  // Calculate Onramp fee from Pay value
-  const onrampFee = ((parseFloat(amount) * 25) / 10000).toFixed(2);
-  // Calculate total fee (onrampFee + networkFeeInINR)
-  const totalFees = (
-    parseFloat(onrampFee) + parseFloat(networkFeeInINR || 0)
-  ).toFixed(2);
+  const networkFeeInINR = calculateTotalFees.networkFeeInINR;
+  const totalFees = calculateTotalFees.totalFees;
 
   return (
     <div className="relative flex justify-center items-center bg-[#080808] p-4 h-screen">
@@ -274,7 +167,7 @@ export default function Buy() {
               </button>
               <div>
                 <button
-                  onClick={() => setIsDarkMode(false)}
+                  onClick={() => isDarkMode(false)}
                   className={`${
                     !isDarkMode ? "text-yellow-500" : "text-gray-400"
                   } hover:text-yellow-500 mr-2`}
@@ -282,7 +175,7 @@ export default function Buy() {
                   <Sun className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => setIsDarkMode(true)}
+                  onClick={() => isDarkMode(true)}
                   className={`${
                     isDarkMode ? "text-blue-400" : "text-gray-400"
                   } hover:text-blue-400`}
@@ -513,377 +406,51 @@ export default function Buy() {
             }`}
           />
         </div>
-        <div className="p-4">
-          <div className="mb-2">
-            <p
-              className={`text-base font-medium tracking-wide mb-2 ${
-                isDarkMode ? "text-white" : "text-[#181A20]"
-              }`}
-            >
-              Pay
-            </p>
-            <div
-              className={`rounded-lg p-3 flex justify-between items-center mb-5 ${
-                isDarkMode ? "bg-[#141414]" : "bg-gray-100"
-              }`}
-            >
-              <input
-                type="text"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className={`w-full ${
-                  isDarkMode
-                    ? "bg-transparent text-2xl font-base text-white"
-                    : "text-2xl font-base text-[#181A20]"
-                } outline-none`}
-              />
-              <div
-                ref={fiatButtonRef}
-                className="flex items-center cursor-pointer"
-                onClick={() => {
-                  setShowFiatDropdown(!showFiatDropdown);
-                  setShowCryptoDropdown(false);
-                }}
-              >
-                <div className="w-6 h-6 mr-2 rounded-full overflow-hidden flex items-center justify-center">
-                  <img
-                    src={selectedFiat.flag}
-                    alt={selectedFiat.code + " flag"}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <span className="mr-2">{selectedFiat.code}</span>
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    showFiatDropdown ? "rotate-180" : ""
-                  }`}
-                />
-              </div>
-            </div>
-            {showFiatDropdown && (
-              <div
-                ref={fiatDropdownRef}
-                className={`absolute top-0 left-0 z-10 w-full h-full rounded-lg shadow-lg border overflow-hidden animate-slide-up ${
-                  isDarkMode
-                    ? "bg-gray-900 border-gray-800 text-white"
-                    : "bg-white border-gray-200 text-[#181A20]"
-                }`}
-              >
-                <div
-                  className={`p-3 border-b border-gray-200 flex justify-between items-center ${
-                    isDarkMode ? "" : "border-gray-200"
-                  }`}
-                >
-                  <h2 className="font-bold">Select Fiat</h2>
-                  <button
-                    onClick={() => setShowFiatDropdown(false)}
-                    className="text-gray-400"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className={`p-3 border-b border-gray-200`}>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="Search"
-                      value={searchFiat}
-                      onChange={(e) => setSearchFiat(e.target.value)}
-                      className={`w-full ${
-                        isDarkMode
-                          ? "bg-gray-800 text-white"
-                          : "bg-gray-100 text-[#181A20]"
-                      } rounded-lg py-2 pl-10 pr-3 text-sm outline-none`}
-                    />
-                  </div>
-                </div>
-                <div className={`p-3 border-b border-gray-200`}>
-                  <p className="text-xs text-gray-400">
-                    All Fiats ({filteredFiat.length})
-                  </p>
-                </div>
-                <div className="max-h-90 overflow-y-auto hide-scrollbar">
-                  {filteredFiat.map((currency) => (
-                    <div
-                      key={currency.code}
-                      className={`flex items-center justify-between p-3 cursor-pointer border-b ${
-                        isDarkMode
-                          ? "hover:bg-gray-200 border-gray-800 text-gray-600"
-                          : "hover:bg-gray-100 border-gray-200 text-[#181A20]"
-                      }`}
-                      onClick={() => handleSelectFiat(currency)}
-                    >
-                      <div className="flex items-center">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center mr-2">
-                          <img
-                            src={currency.flag}
-                            alt={currency.code + " flag"}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{currency.name}</p>
-                          <p className="text-xs text-gray-400">
-                            {currency.symbol} - {currency.code}
-                          </p>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-gray-400" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="mb-2">
-              <p
-                className={`text-base font-medium tracking-wid mb-2 ${
-                  isDarkMode ? "text-white" : "text-[#181A20]"
-                }`}
-              >
-                You get
-              </p>
-              <div
-                className={`rounded-lg p-3 flex justify-between items-center ${
-                  isDarkMode ? "bg-[#141414]" : "bg-gray-100"
-                }`}
-              >
-                <input
-                  type="text"
-                  value={youGetValue}
-                  onChange={(e) => setYouGetValue(e.target.value)}
-                  className="text-2xl font-semibold bg-transparent outline-none w-24"
-                />
-                <div
-                  ref={cryptoButtonRef}
-                  className="flex items-center cursor-pointer"
-                  onClick={() => {
-                    setShowCryptoDropdown(!showCryptoDropdown);
-                    setShowFiatDropdown(false);
-                  }}
-                >
-                  <div className="w-6 h-6 mr-2 rounded-full bg-teal-500 flex items-center justify-center">
-                    <span className="text-xs">{selectedCrypto.icon}</span>
-                  </div>
-                  <span className="mr-2">{selectedCrypto.code}</span>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform ${
-                      showCryptoDropdown ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </div>
-              {showCryptoDropdown && (
-                <div
-                  ref={cryptoDropdownRef}
-                  className={`absolute top-0 left-0 z-10 w-full h-full rounded-lg shadow-lg border overflow-y-auto animate-slide-up ${
-                    isDarkMode
-                      ? "bg-gray-900 border-gray-800 text-white"
-                      : "bg-white border-gray-200 text-[#181A20]"
-                  }`}
-                >
-                  <div
-                    className={`p-3 border-b border-gray-800 flex justify-between items-center ${
-                      isDarkMode ? "" : "border-gray-200"
-                    }`}
-                  >
-                    <h2 className="font-bold">Select Crypto</h2>
-                    <button
-                      onClick={() => setShowCryptoDropdown(false)}
-                      className="text-gray-400"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div
-                    className={`p-3 border-b border-gray-800 ${
-                      isDarkMode ? "" : "border-gray-200"
-                    }`}
-                  >
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input
-                        type="text"
-                        placeholder="Search"
-                        value={searchCrypto}
-                        onChange={(e) => setSearchCrypto(e.target.value)}
-                        className={`w-full ${
-                          isDarkMode
-                            ? "bg-gray-800 text-white"
-                            : "bg-gray-100 text-[#181A20]"
-                        } rounded-lg py-3 pl-10 pr-3 text-sm outline-none`}
-                      />
-                    </div>
-                  </div>
-                  <div className={`p-3 border-b border-gray-200`}>
-                    <p className="text-xs text-gray-400">
-                      All Cryptocurrencies ({filteredCrypto.length})
-                    </p>
-                  </div>
-                  <div className="max-h-90 overflow-y-auto hide-scrollbar">
-                    {filteredCrypto.map((currency) => (
-                      <div
-                        key={currency.code}
-                        className={`flex items-center justify-between p-3 cursor-pointer border-b ${
-                          isDarkMode
-                            ? "hover:bg-gray-800 border-gray-800 text-white"
-                            : "hover:bg-gray-100 border-gray-200 text-[#181A20]"
-                        }`}
-                        onClick={() => {
-                          setSelectedCryptoForNetwork(currency);
-                          setShowNetworkDropdown(true);
-                          setShowCryptoDropdown(false);
-                        }}
-                      >
-                        <div className="flex items-center">
-                          <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center mr-2">
-                            <span>{currency.icon}</span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">
-                              {currency.name}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {currency.symbol}
-                            </p>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {showNetworkDropdown && selectedCryptoForNetwork && (
-                <div className="absolute top-0 left-0 z-50 flex items-center justify-center w-full h-full bg-black bg-opacity-60">
-                  <div className="bg-[#181A20] rounded-xl shadow-xl w-[95vw] max-w-lg p-6 relative animate-fade-in text-white">
-                    <button
-                      className="absolute top-3 right-3 text-gray-400 hover:text-white"
-                      onClick={() => setShowNetworkDropdown(false)}
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                    <div className="flex items-center mb-4">
-                      <span className="text-2xl mr-2">
-                        {selectedCryptoForNetwork.icon}
-                      </span>
-                      <span className="font-bold text-lg mr-2">
-                        {selectedCryptoForNetwork.name}
-                      </span>
-                    </div>
-                    <div className="mb-2 font-semibold">
-                      Select blockchain network
-                    </div>
-                    <div className="mb-4 text-xs text-gray-400">
-                      Ensure that you use the same network on the other end.
-                    </div>
-                    <div className="mb-2 text-blue-400 cursor-pointer text-sm mb-5">
-                      What's this?
-                    </div>
-                    <div className="flex font-bold text-xs mb-2 border-b border-gray-700 pb-5">
-                      <div className="w-2/5 text-gray-400">Network</div>
-                      <div className="w-1/3 text-gray-400">
-                        Network fee <br />({selectedCryptoForNetwork.code})
-                      </div>
-                      <div className="w-1/3 text-gray-400">
-                        Min Buy <br /> (IND)
-                      </div>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto hide-scrollbar divide-y divide-gray-700">
-                      {(
-                        networkOptions[selectedCryptoForNetwork.code] || []
-                      ).map((net) => (
-                        <div
-                          key={net.name}
-                          className="flex items-center py-3 cursor-pointer hover:bg-gray-800 rounded-lg px-2"
-                          onClick={() => {
-                            setSelectedCrypto(selectedCryptoForNetwork);
-                            setSelectedNetwork(net);
-                            setShowNetworkDropdown(false);
-                          }}
-                        >
-                          <div className="w-2/5 flex items-center">
-                            <span className="bg-[#23262F] rounded-full p-2 mr-2">
-                              {selectedCryptoForNetwork.icon}
-                            </span>
-                            <div>
-                              <div className="font-semibold text-sm">
-                                {net.name}
-                              </div>
-                              <div className="text-xs text-gray-400 truncate w-24">
-                                {net.desc}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="w-1/3 font-mono">{net.fee}</div>
-                          <div className="w-1/3 font-mono">{net.minBuy}</div>
-                          <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-between mb-5">
-              <p
-                className={`text-sm ${
-                  isDarkMode ? "text-gray-400" : "text-[#181A20]"
-                }`}
-              >
-                1 {selectedCryptoForNetwork?.code} ≈ ₺ 94
-              </p>
-              <p
-                className={`text-sm ${
-                  isDarkMode ? "text-gray-400" : "text-[#181A20]"
-                }`}
-              >
-                {selectedNetwork
-                  ? `${selectedNetwork.name} · Network fee ₹${selectedNetwork.fee}`
-                  : ""}
-              </p>
-            </div>
-            <div
-              className={`rounded-lg overflow-hidden mb-10 py-2 ${
-                isDarkMode ? "bg-[#141414]" : "bg-gray-100"
-              }`}
-            >
-              <div
-                className={`p-3 flex justify-between items-center cursor-pointer ${
-                  isDarkMode ? "" : "text-[#181A20]"
-                }`}
-              >
-                <span
-                  className={`${isDarkMode ? "text-white" : "text-[#181A20]"}`}
-                >
-                  You pay {selectedFiat.symbol} 1,050 including fees
-                </span>
-                <button
-                  className={`${isDarkMode ? "text-white" : "text-[#181A20]"}`}
-                  onClick={() => setShowPreviewModal(true)}
-                >
-                  Preview
-                </button>
-              </div>
-            </div>
+        <Swap
+          isDarkMode={isDarkMode}
+          fiatCurrencies={fiatCurrencies}
+          cryptoCurrencies={cryptoCurrencies}
+          networkOptions={networkOptions}
+          cryptoToINR={cryptoToINR}
+          onUpdateTransaction={handleTransactionUpdate}
+        />
+        <div
+          className={`rounded-lg overflow-hidden mb-10 py-2 ${
+            isDarkMode ? "bg-[#141414]" : "bg-gray-100"
+          }`}
+        >
+          <div
+            className={`p-3 flex justify-between items-center cursor-pointer ${
+              isDarkMode ? "" : "text-[#181A20]"
+            }`}
+          >
+            <span className={`${isDarkMode ? "text-white" : "text-[#181A20]"}`}>
+              You pay {selectedFiat.symbol} 1,050 including fees
+            </span>
             <button
-              className={`w-full font-medium py-3 rounded-lg transition mb-10 ${
-                isDarkMode
-                  ? "bg-blue-500 hover:bg-blue-600 text-white"
-                  : "bg-blue-400 hover:bg-blue-500 text-white"
-              }`}
+              className={`${isDarkMode ? "text-white" : "text-[#181A20]"}`}
+              onClick={() => setShowPreviewModal(true)}
             >
-              Proceed
+              Preview
             </button>
-            <div
-              className={`flex items-center justify-center text-xs ${
-                isDarkMode ? "text-gray-400" : "text-gray-600"
-              }`}
-            >
-              <span className="w-4 h-4 mr-2 text-green-500">✓</span>
-              <span>Onramp is registered with FIU-IND in India</span>
-            </div>
           </div>
+        </div>
+        <button
+          className={`w-full font-medium py-3 rounded-lg transition mb-10 ${
+            isDarkMode
+              ? "bg-blue-500 hover:bg-blue-600 text-white"
+              : "bg-blue-400 hover:bg-blue-500 text-white"
+          }`}
+        >
+          Proceed
+        </button>
+        <div
+          className={`flex items-center justify-center text-xs ${
+            isDarkMode ? "text-gray-400" : "text-gray-600"
+          }`}
+        >
+          <span className="w-4 h-4 mr-2 text-green-500">✓</span>
+          <span>Onramp is registered with FIU-IND in India</span>
         </div>
         {showPreviewModal && (
           <div
@@ -920,7 +487,7 @@ export default function Buy() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Onramp fee</span>
-                  <span>₹ {onrampFee}</span>
+                  <span>₹ {calculateTotalFees.onrampFee}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Blockchain Fee</span>
